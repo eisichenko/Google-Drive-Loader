@@ -1,4 +1,4 @@
-from gdloader import creds, EXECUTION_RESULT
+from push import creds, EXECUTION_RESULT
 from googleapiclient import discovery
 from httplib2 import Http
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
