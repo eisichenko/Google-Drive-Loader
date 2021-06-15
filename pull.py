@@ -38,10 +38,10 @@ if __name__ == '__main__':
         if len(local_items_names) != len(local_names_set):
             raise Exception('Duplicate local items')
         
-        upload, delete = api_helper.fetch_from_local_to_drive(drive_names_set=drive_names_set,
+        download, delete = api_helper.fetch_from_drive_to_local(drive_names_set=drive_names_set,
                                              local_names_set=local_names_set)
         
-        if len(upload) == 0 and len(delete) == 0:
+        if len(download) == 0 and len(delete) == 0:
             if api_helper.test_number_of_items(drive_directory=DRIVE_DIRECTORY, 
                                             local_directory=LOCAL_DIRECTORY):
                 api_helper.print_success('\nEverything is up to date\n')
@@ -51,9 +51,9 @@ if __name__ == '__main__':
         
         api_helper.print_cyan('=' * 40)
         
-        api_helper.print_cyan('Will be uploaded:\n')
+        api_helper.print_cyan('Will be downloaded:\n')
         
-        for f in upload:
+        for f in download:
             api_helper.print_cyan(f)
         
         api_helper.print_cyan('=' * 40)
@@ -74,17 +74,23 @@ if __name__ == '__main__':
             
             threads = []
             
-            for name in upload:
-                threads.append(threading.Thread(target=api_helper.upload_file,
-                                                kwargs={'target_name': name,
-                                                        'source_name': join(LOCAL_DIRECTORY, name), 
-                                                        'folder_name': DRIVE_DIRECTORY}))
+            for name in download:
+                item = api_helper.get_item_by_name(drive_items, name)
                 
+                threads.append(threading.Thread(target=api_helper.download_file,
+                                                kwargs={
+                                                    'file_id': item['id'],
+                                                    'filename': join(LOCAL_DIRECTORY, item['name']),
+                                                    'name': item['name']
+                                                }))
+
+            
             for name in delete:
-                item = api_helper.get_item_by_name(files=drive_items, name=name)
-                threads.append(threading.Thread(target=api_helper.delete_file,
-                                                kwargs={'file_id': item['id'],
-                                                        'filename': item['name']}))
+                threads.append(threading.Thread(target=local_helper.delete_file,
+                                                kwargs={
+                                                    'path': join(LOCAL_DIRECTORY, name),
+                                                    'filename': name
+                                                }))
 
             for thread in threads:
                 thread.start()
@@ -96,12 +102,12 @@ if __name__ == '__main__':
             
             if api_helper.test_number_of_items(drive_directory=DRIVE_DIRECTORY, 
                                             local_directory=LOCAL_DIRECTORY) and EXECUTION_RESULT:
-                api_helper.print_success('\nPush was done successfully!!!\n')
+                api_helper.print_success('\nPull was done successfully!!!\n')
             else:
-                api_helper.print_fail('Push was not completed :(')
+                api_helper.print_fail('Pull was not completed :(')
         else:
-            api_helper.print_fail('\nPush declined.\n')
+            api_helper.print_fail('\nPull declined.\n')
 
     except Exception as ex:
         api_helper.print_fail(ex)
-        api_helper.print_fail('Push was not completed :(')
+        api_helper.print_fail('Pull was not completed :(')

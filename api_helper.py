@@ -115,8 +115,8 @@ def get_folder_items(name):
         EXECUTION_RESULT = False
         
 
-def download_file(file_id, filename):
-    lock_print(f'\nDownloading file {filename}...', end=' ')
+def download_file(file_id, filename, name):
+    lock_print(f'\nDownloading file {name}...', end=' ')
     
     DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))    
     request = DRIVE.files().get_media(fileId=file_id)
@@ -126,7 +126,6 @@ def download_file(file_id, filename):
     done = False
     while done is False:
         status, done = downloader.next_chunk()
-        lock_print(f'{status.progress() * 100 : .2f}%', end=' ')
     
     with io.open(filename, 'wb') as f:
         fh.seek(0)
@@ -135,9 +134,9 @@ def download_file(file_id, filename):
     lock_print()
         
     if done:
-        print_success(f'Downloaded {filename}')
+        print_success(f'Downloaded {name}')
     else:
-        print_fail(f'FAILED download {filename}')
+        print_fail(f'FAILED download {name}')
         global EXECUTION_RESULT
         EXECUTION_RESULT = False
         
@@ -185,6 +184,13 @@ def fetch_from_local_to_drive(drive_names_set, local_names_set):
     upload = local_names_set - drive_names_set
     delete = drive_names_set - local_names_set    
     return upload, delete
+
+
+def fetch_from_drive_to_local(drive_names_set, local_names_set):
+    lock_print('Fetching for pull...\n')
+    download = drive_names_set - local_names_set 
+    delete = local_names_set - drive_names_set 
+    return download, delete
 
 
 def test_number_of_items(drive_directory, local_directory):
