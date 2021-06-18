@@ -42,7 +42,7 @@ if __name__ == '__main__':
                                              local_names_set=local_names_set)
         
         if len(download) == 0 and len(delete) == 0:
-            if api_helper.test_number_of_items(drive_directory=DRIVE_DIRECTORY, 
+            if api_helper.test_items(drive_directory=DRIVE_DIRECTORY, 
                                             local_directory=LOCAL_DIRECTORY):
                 api_helper.print_success('\nEverything is up to date\n')
             else:
@@ -100,7 +100,7 @@ if __name__ == '__main__':
 
             api_helper.print_cyan(f'\nOperation took {time.time() - start : .2f} seconds')
             
-            if api_helper.test_number_of_items(drive_directory=DRIVE_DIRECTORY, 
+            if api_helper.test_items(drive_directory=DRIVE_DIRECTORY, 
                                             local_directory=LOCAL_DIRECTORY) and EXECUTION_RESULT:
                 api_helper.print_success('\nPull was done successfully!!!\n')
             else:

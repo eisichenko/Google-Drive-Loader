@@ -193,15 +193,29 @@ def fetch_from_drive_to_local(drive_names_set, local_names_set):
     return download, delete
 
 
-def test_number_of_items(drive_directory, local_directory):
+def test_items(drive_directory, local_directory):
     drive_items = get_folder_items(drive_directory)
+        
+    drive_items_names = list(map(lambda x : x['name'], drive_items))
+    
+    drive_names_set = set(drive_items_names)
+    
+    if len(drive_items_names) != len(drive_names_set):
+        raise Exception('Duplicate drive items')
+    
     local_items_names = local_helper.get_local_directory_files(local_directory)
-    res = len(drive_items) == len(local_items_names)
+    
+    local_names_set = set(local_items_names)
+    
+    if len(local_items_names) != len(local_names_set):
+        raise Exception('Duplicate local items')
+    
+    res = (drive_names_set == local_names_set)
     
     if res:
-        print_success(f'{len(drive_items)} (drive) == {len(local_items_names)} (local)')
+        print_success(f'{len(drive_names_set)} (drive) == {len(local_names_set)} (local)')
     else:
-        print_fail(f'{len(drive_items)} != {len(local_items_names)}')
+        print_fail(f'{len(drive_names_set)} != {len(local_names_set)}')
         global EXECUTION_RESULT
         EXECUTION_RESULT = False
 
