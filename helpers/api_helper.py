@@ -6,7 +6,7 @@ from config import *
 import config
 import io
 from threading import Lock, Semaphore
-import local_helper
+from helpers import local_helper
 
 print_lock = Lock()
 

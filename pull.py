@@ -3,8 +3,7 @@ from googleapiclient import discovery
 from httplib2 import Http
 from oauth2client import file, client, tools
 from config import *
-import api_helper
-import local_helper
+from helpers import api_helper, local_helper
 from os.path import join
 import time
 import threading

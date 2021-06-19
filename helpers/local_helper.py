@@ -1,6 +1,6 @@
 from os import listdir, remove
 from os.path import isfile, join
-import api_helper
+from helpers import api_helper
 
 
 def get_local_directory_files(path):
