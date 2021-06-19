@@ -3,11 +3,14 @@ from googleapiclient import discovery
 from httplib2 import Http
 from googleapiclient.http import MediaFileUpload, MediaIoBaseDownload
 from config import *
+import config
 import io
-from threading import Lock
+from threading import Lock, Semaphore
 import local_helper
 
 print_lock = Lock()
+
+semaphore = Semaphore(LOADING_LIMIT)
 
 
 class bcolors:
@@ -60,33 +63,37 @@ def get_all_files():
 
 
 def upload_file(target_name, source_name, folder_name=None):
-    try:
-        if folder_name != None:
-            folder_id = _get_id_by_name(folder_name)
-            file_metadata = { 'name': target_name,
-                              'parents': [folder_id]
-                            }
-        else:
-            file_metadata = { 'name': target_name }
-        
-        lock_print(f'\nUploading file {source_name} --> {target_name}...\n')
-        
-        media = MediaFileUpload(source_name,
-                                resumable=True)
-        
-        DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))
-        file = DRIVE.files().create(body=file_metadata, media_body=media, fields='id, name').execute()
-        
-        if file:
-            print_success(f'File {file["name"]} UPLOADED (id {file["id"]})')
-        else:
-            raise Exception('Could not upload file')
-    except Exception as ex:
-        print_fail(f'File {source_name} FAIL UPLOAD')
-        print_fail(ex)
-        global EXECUTION_RESULT
-        EXECUTION_RESULT = False
-        
+    with semaphore:
+        try:
+            if folder_name != None:
+                folder_id = _get_id_by_name(folder_name)
+                file_metadata = { 'name': target_name,
+                                'parents': [folder_id]
+                                }
+            else:
+                file_metadata = { 'name': target_name }
+            
+            lock_print(f'\nUploading file {source_name} --> {target_name}...\n')
+            
+            media = MediaFileUpload(source_name,
+                                    resumable=True)
+            
+            DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))
+            file = DRIVE.files().create(body=file_metadata, media_body=media, fields='id, name').execute()
+            
+            if file:
+                config.CURRENT_LOAD_NUMBER += 1
+                loaded = config.CURRENT_LOAD_NUMBER
+                total = config.TOTAL_LOAD_NUMBER
+                print_success(f'File {file["name"]} UPLOADED (id {file["id"]}) [{loaded / float(total) * 100 : .2f}% ({loaded}/{total}) ]')
+            else:
+                raise Exception('Could not upload file')
+        except Exception as ex:
+            print_fail(f'File {source_name} FAIL UPLOAD')
+            print_fail(ex)
+            global EXECUTION_RESULT
+            EXECUTION_RESULT = False
+            
 
 def get_folder_items(name):
     try:
@@ -116,44 +123,47 @@ def get_folder_items(name):
         
 
 def download_file(file_id, filename, name):
-    lock_print(f'\nDownloading file {name}...', end=' ')
-    
-    DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))    
-    request = DRIVE.files().get_media(fileId=file_id)
-    
-    fh = io.BytesIO()
-    downloader = MediaIoBaseDownload(fh, request)
-    done = False
-    while done is False:
-        status, done = downloader.next_chunk()
-    
-    with io.open(filename, 'wb') as f:
-        fh.seek(0)
-        f.write(fh.read())
-
-    lock_print()
+    with semaphore:
+        lock_print(f'\nDownloading file {name}...')
         
-    if done:
-        print_success(f'Downloaded {name}')
-    else:
-        print_fail(f'FAILED download {name}')
-        global EXECUTION_RESULT
-        EXECUTION_RESULT = False
+        DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))    
+        request = DRIVE.files().get_media(fileId=file_id)
         
+        fh = io.BytesIO()
+        downloader = MediaIoBaseDownload(fh, request)
+        done = False
+        while done is False:
+            status, done = downloader.next_chunk()
+        
+        with io.open(filename, 'wb') as f:
+            fh.seek(0)
+            f.write(fh.read())
+            
+        if done:
+            config.CURRENT_LOAD_NUMBER += 1
+            loaded = config.CURRENT_LOAD_NUMBER
+            total = config.TOTAL_LOAD_NUMBER
+            print_success(f'Downloaded {name} [{loaded / float(total) * 100 : .2f}% ({loaded}/{total}) ]')
+        else:
+            print_fail(f'FAILED download {name}')
+            global EXECUTION_RESULT
+            EXECUTION_RESULT = False
+            
 
 def delete_file(file_id, filename):
-    try:
-        lock_print(f'\nDeleting file {filename}...')
-        
-        DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))
-        DRIVE.files().delete(fileId=file_id).execute()
-        
-        print_success(f'File {filename} was successfully deleted!')
-    except Exception as ex:
-        print_fail(ex)
-        print_fail(f'FAILED to delete file {filename}')
-        global EXECUTION_RESULT
-        EXECUTION_RESULT = False
+    with semaphore:
+        try:
+            lock_print(f'\nDeleting file {filename}...')
+            
+            DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))
+            DRIVE.files().delete(fileId=file_id).execute()
+            
+            print_success(f'File {filename} was successfully deleted!')
+        except Exception as ex:
+            print_fail(ex)
+            print_fail(f'FAILED to delete file {filename}')
+            global EXECUTION_RESULT
+            EXECUTION_RESULT = False
 
 
 def _get_id_by_name(name):

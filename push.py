@@ -3,6 +3,7 @@ from googleapiclient import discovery
 from httplib2 import Http
 from oauth2client import file, client, tools
 from config import *
+import config
 import api_helper
 import local_helper
 from os.path import join
@@ -73,6 +74,9 @@ if __name__ == '__main__':
             start = time.time()
             
             threads = []
+            
+            config.CURRENT_LOAD_NUMBER = 0
+            config.TOTAL_LOAD_NUMBER = len(upload)
             
             for name in upload:
                 threads.append(threading.Thread(target=api_helper.upload_file,

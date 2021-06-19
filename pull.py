@@ -8,6 +8,7 @@ import local_helper
 from os.path import join
 import time
 import threading
+import config
 
 EXECUTION_RESULT = True
 
@@ -73,6 +74,9 @@ if __name__ == '__main__':
             start = time.time()
             
             threads = []
+            
+            config.CURRENT_LOAD_NUMBER = 0
+            config.TOTAL_LOAD_NUMBER = len(download)
             
             for name in download:
                 item = api_helper.get_item_by_name(drive_items, name)
