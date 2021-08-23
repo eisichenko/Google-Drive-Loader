@@ -167,8 +167,10 @@ def delete_file(file_id, filename):
 
 
 def _get_id_by_name(name):
+    fixed_quotes_name = name.replace("'", "\\'")
+    
     DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))
-    response = DRIVE.files().list(q=f"name='{name}' and trashed=false").execute()
+    response = DRIVE.files().list(q=f"name='{ fixed_quotes_name }' and trashed=false").execute()
     
     if len(response['files']) == 0:
         raise Exception(f'Name was not found "{name}"')
