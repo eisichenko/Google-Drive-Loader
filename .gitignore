@@ -2,6 +2,7 @@ client_id.json
 storage.json
 files/
 .vscode
+win_env/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
