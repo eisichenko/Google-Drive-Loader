@@ -1,4 +1,4 @@
-# GoogleDriveLoader
+# Google Drive Loader
 - Google Drive utility for pushing your local folder to GoogleDrive folder and pulling from it.
 
 - Set your paths in `config.py` file.
