@@ -3,11 +3,15 @@ from googleapiclient import discovery
 from httplib2 import Http
 from oauth2client import file, client, tools
 from config import *
+import config
 from helpers import api_helper, local_helper
 from os.path import join
 import time
-import threading
-import config
+from pprint import pprint
+import traceback
+
+from helpers.files import DriveFile, LocalFile
+
 
 EXECUTION_RESULT = True
 
@@ -22,99 +26,111 @@ DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))
 
 if __name__ == '__main__':
     try:
-        for path in PATHS:
-            DRIVE_DIRECTORY = path.drive_folder_name
-            LOCAL_DIRECTORY = path.local_folder_path
+        api_helper.print_warning('\nPULL')
+        
+        DRIVE_DIRECTORY = PATH.drive_folder_name
+        LOCAL_DIRECTORY = PATH.local_folder_path
+        
+        drive_folders = api_helper.get_drive_nested_folders(DRIVE_DIRECTORY)
             
-            drive_items = api_helper.get_folder_items(DRIVE_DIRECTORY)
+        print('Drive folders:')
+        pprint(drive_folders)
+        
+        local_folders = local_helper.get_local_nested_folders(LOCAL_DIRECTORY)
+        
+        print('\nLocal folders:')
+        pprint(local_folders)
+        
+        if local_folders != drive_folders:
+            raise Exception(f'Local and drive folders are not equal')
+        
+        pull_dict = {}
+        
+        is_up_to_date = True
+        
+        for drive_folder in drive_folders:
+            name = drive_folder.name
+            local_folder = local_helper.get_item_by_name(local_folders, name)
             
-            drive_items_names = list(map(lambda x : x['name'], drive_items))
+            drive_file_set = api_helper.get_folder_items(name)
             
-            drive_names_set = set(drive_items_names)
+            local_file_set = local_helper.get_local_directory_files(local_folder.path)
             
-            if len(drive_items_names) != len(drive_names_set):
-                raise Exception('Duplicate drive items')
+            download, delete = api_helper.fetch_from_drive_to_local(drive_set=drive_file_set,
+                                                local_set=local_file_set)
+            pull_dict[drive_folder] = {}
+            pull_dict[drive_folder][api_helper.DOWNLOAD_FROM_DRIVE_KEY] = download
+            pull_dict[drive_folder][api_helper.DELETE_IN_LOCAL_KEY] = delete
             
-            local_items_names = local_helper.get_local_directory_files(LOCAL_DIRECTORY)
-            
-            local_names_set = set(local_items_names)
-            
-            if len(local_items_names) != len(local_names_set):
-                raise Exception('Duplicate local items')
-            
-            download, delete = api_helper.fetch_from_drive_to_local(drive_names_set=drive_names_set,
-                                                local_names_set=local_names_set)
-            
-            if len(download) == 0 and len(delete) == 0:
-                if api_helper.test_items(drive_directory=DRIVE_DIRECTORY, 
-                                                local_directory=LOCAL_DIRECTORY):
-                    api_helper.print_success(f'\nEverything is up to date\n{ LOCAL_DIRECTORY } : { DRIVE_DIRECTORY }')
-                else:
-                    api_helper.print_fail('\nSomething went wrong\n')
-                continue
-            
+            if is_up_to_date and (len(download) != 0 or len(delete) != 0):
+                is_up_to_date = False
+        
+        if is_up_to_date:
+            if api_helper.test_items(drive_directory=DRIVE_DIRECTORY, 
+                                            local_directory=LOCAL_DIRECTORY):
+                api_helper.print_success(f'\nEverything is up to date\n{ DRIVE_DIRECTORY } -> { LOCAL_DIRECTORY }\n')
+            else:
+                api_helper.print_fail('\nFolders are not equal, no pull items though\n')
+            exit()
+        
+        for drive_folder in pull_dict:
             api_helper.print_cyan('=' * 40)
-            
+            api_helper.print_success(f'FOLDER: {drive_folder}\n')
             api_helper.print_cyan('Will be downloaded:\n')
             
-            for f in download:
+            for f in pull_dict[drive_folder][api_helper.DOWNLOAD_FROM_DRIVE_KEY]:
                 api_helper.print_cyan(f)
             
             api_helper.print_cyan('=' * 40)
             
             api_helper.print_warning('\n' + '=' * 40)
-            
+            api_helper.print_success(f'FOLDER: {drive_folder}\n')
             api_helper.print_warning('Will be deleted:\n')
             
-            for f in delete:
+            for f in pull_dict[drive_folder][api_helper.DELETE_IN_LOCAL_KEY]:
                 api_helper.print_warning(f)
                 
             api_helper.print_warning('=' * 40 + '\n')
 
-            choice = input('Are you sure to complete the operation? (y/n) ')
+        choice = input('Are you sure to complete the operation? (y/n) ')
+        
+        if choice == 'y':
+            start = time.time()
             
-            if choice == 'y':
-                start = time.time()
+            config.CURRENT_LOAD_NUMBER = 0
+            config.TOTAL_LOAD_NUMBER = api_helper.get_amount_of_files(pull_dict)
+            
+            for drive_folder in pull_dict:
+                local_folder = local_helper.get_item_by_name(local_folders, drive_folder.name)
                 
-                threads = []
+                download = pull_dict[drive_folder][api_helper.DOWNLOAD_FROM_DRIVE_KEY]
+                delete = pull_dict[drive_folder][api_helper.DELETE_IN_LOCAL_KEY]
                 
-                config.CURRENT_LOAD_NUMBER = 0
-                config.TOTAL_LOAD_NUMBER = len(download)
-                
-                for name in download:
-                    item = api_helper.get_item_by_name(drive_items, name)
+                for drive_file in download:    
+                    drive_file: DriveFile
                     
-                    threads.append(threading.Thread(target=api_helper.download_file,
-                                                    kwargs={
-                                                        'file_id': item['id'],
-                                                        'filename': join(LOCAL_DIRECTORY, item['name']),
-                                                        'name': item['name']
-                                                    }))
-
-                
-                for name in delete:
-                    threads.append(threading.Thread(target=local_helper.delete_file,
-                                                    kwargs={
-                                                        'path': join(LOCAL_DIRECTORY, name),
-                                                        'filename': name
-                                                    }))
-
-                for thread in threads:
-                    thread.start()
+                    api_helper.download_file(
+                        file_id=drive_file.id,
+                        name=drive_file.name,
+                        local_path=join(local_folder.path, drive_file.name)
+                    )
                     
-                for thread in threads:
-                    thread.join()
+                for local_file in delete:
+                    local_file: LocalFile
+                    
+                    local_helper.delete_file(local_file)
 
-                api_helper.print_cyan(f'\nOperation took {time.time() - start : .2f} seconds')
-                
-                if api_helper.test_items(drive_directory=DRIVE_DIRECTORY, 
-                                                local_directory=LOCAL_DIRECTORY) and EXECUTION_RESULT:
-                    api_helper.print_success('\nPull was done successfully!!!\n')
-                else:
-                    api_helper.print_fail('Pull was not completed :(')
+            if api_helper.test_items(drive_directory=DRIVE_DIRECTORY, 
+                                            local_directory=LOCAL_DIRECTORY) and EXECUTION_RESULT:
+                api_helper.print_success('\nPull was done successfully!!!\n')
             else:
-                api_helper.print_fail('\nPull declined.\n')
+                api_helper.print_fail('Pull was not completed :(')
+            
+            api_helper.print_cyan(f'Operation took {time.time() - start : .2f} seconds\n')
+        else:
+            api_helper.print_fail('\nPull was declined.\n')
 
     except Exception as ex:
         api_helper.print_fail(ex)
         api_helper.print_fail('Pull was not completed :(')
+        # traceback.print_exc()

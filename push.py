@@ -7,7 +7,11 @@ import config
 from helpers import api_helper, local_helper
 from os.path import join
 import time
-import threading
+from pprint import pprint
+import traceback
+
+from helpers.files import DriveFile, LocalFile
+
 
 EXECUTION_RESULT = True
 
@@ -22,93 +26,110 @@ DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))
 
 if __name__ == '__main__':
     try:
-        for path in PATHS:
-            DRIVE_DIRECTORY = path.drive_folder_name
-            LOCAL_DIRECTORY = path.local_folder_path
+        api_helper.print_warning('\nPUSH')
+        
+        DRIVE_DIRECTORY = PATH.drive_folder_name
+        LOCAL_DIRECTORY = PATH.local_folder_path
+        
+        drive_folders = api_helper.get_drive_nested_folders(DRIVE_DIRECTORY)
             
-            drive_items = api_helper.get_folder_items(DRIVE_DIRECTORY)
+        print('Drive folders:')
+        pprint(drive_folders)
+        
+        local_folders = local_helper.get_local_nested_folders(LOCAL_DIRECTORY)
+        
+        print('\nLocal folders:')
+        pprint(local_folders)
+        
+        if local_folders != drive_folders:
+            raise Exception(f'Local and drive folders are not equal')
+        
+        push_dict = {}
+        
+        is_up_to_date = True
+        
+        for drive_folder in drive_folders:
+            name = drive_folder.name
+            local_folder = local_helper.get_item_by_name(local_folders, name)
             
-            drive_items_names = list(map(lambda x : x['name'], drive_items))
+            drive_file_set = api_helper.get_folder_items(name)
             
-            drive_names_set = set(drive_items_names)
+            local_file_set = local_helper.get_local_directory_files(local_folder.path)
             
-            if len(drive_items_names) != len(drive_names_set):
-                raise Exception('Duplicate drive items')
+            upload, delete = api_helper.fetch_from_local_to_drive(drive_set=drive_file_set,
+                                                local_set=local_file_set)
+            push_dict[drive_folder] = {}
+            push_dict[drive_folder][api_helper.UPLOAD_TO_DRIVE_KEY] = upload
+            push_dict[drive_folder][api_helper.DELETE_ON_DRIVE_KEY] = delete
             
-            local_items_names = local_helper.get_local_directory_files(LOCAL_DIRECTORY)
-            
-            local_names_set = set(local_items_names)
-            
-            if len(local_items_names) != len(local_names_set):
-                raise Exception('Duplicate local items')
-            
-            upload, delete = api_helper.fetch_from_local_to_drive(drive_names_set=drive_names_set,
-                                                local_names_set=local_names_set)
-            
-            if len(upload) == 0 and len(delete) == 0:
-                if api_helper.test_items(drive_directory=DRIVE_DIRECTORY, 
-                                                local_directory=LOCAL_DIRECTORY):
-                    api_helper.print_success(f'\nEverything is up to date\n{ LOCAL_DIRECTORY } : { DRIVE_DIRECTORY }')
-                else:
-                    api_helper.print_fail('\nSomething went wrong\n')
-                continue
-            
+            if is_up_to_date and (len(upload) != 0 or len(delete) != 0):
+                is_up_to_date = False
+        
+        if is_up_to_date:
+            if api_helper.test_items(drive_directory=DRIVE_DIRECTORY, 
+                                            local_directory=LOCAL_DIRECTORY):
+                api_helper.print_success(f'\nEverything is up to date\n{ LOCAL_DIRECTORY } -> { DRIVE_DIRECTORY }\n')
+            else:
+                api_helper.print_fail('\nFolders are not equal, no push items though\n')
+            exit()
+        
+        for drive_folder in push_dict:
             api_helper.print_cyan('=' * 40)
-            
+            api_helper.print_success(f'FOLDER: {drive_folder}\n')
             api_helper.print_cyan('Will be uploaded:\n')
             
-            for f in upload:
+            for f in push_dict[drive_folder][api_helper.UPLOAD_TO_DRIVE_KEY]:
                 api_helper.print_cyan(f)
             
             api_helper.print_cyan('=' * 40)
             
             api_helper.print_warning('\n' + '=' * 40)
-            
+            api_helper.print_success(f'FOLDER: {drive_folder}\n')
             api_helper.print_warning('Will be deleted:\n')
             
-            for f in delete:
+            for f in push_dict[drive_folder][api_helper.DELETE_ON_DRIVE_KEY]:
                 api_helper.print_warning(f)
                 
             api_helper.print_warning('=' * 40 + '\n')
 
-            choice = input('Are you sure to complete the operation? (y/n) ')
+        choice = input('Are you sure to complete the operation? (y/n) ')
+        
+        if choice == 'y':
+            start = time.time()
             
-            if choice == 'y':
-                start = time.time()
+            config.CURRENT_LOAD_NUMBER = 0
+            config.TOTAL_LOAD_NUMBER = api_helper.get_amount_of_files(push_dict)
+            
+            for drive_folder in push_dict:
+                upload = push_dict[drive_folder][api_helper.UPLOAD_TO_DRIVE_KEY]
+                delete = push_dict[drive_folder][api_helper.DELETE_ON_DRIVE_KEY]
                 
-                threads = []
-                
-                config.CURRENT_LOAD_NUMBER = 0
-                config.TOTAL_LOAD_NUMBER = len(upload)
-                
-                for name in upload:
-                    threads.append(threading.Thread(target=api_helper.upload_file,
-                                                    kwargs={'target_name': name,
-                                                            'source_name': join(LOCAL_DIRECTORY, name), 
-                                                            'folder_name': DRIVE_DIRECTORY}))
+                for local_file in upload:    
+                    local_file: LocalFile
                     
-                for name in delete:
-                    item = api_helper.get_item_by_name(files=drive_items, name=name)
-                    threads.append(threading.Thread(target=api_helper.delete_file,
-                                                    kwargs={'file_id': item['id'],
-                                                            'filename': item['name']}))
-
-                for thread in threads:
-                    thread.start()
+                    api_helper.upload_file(
+                        target_name=local_file.name,
+                        source_name=local_file.path,
+                        folder=drive_folder
+                        
+                    )
                     
-                for thread in threads:
-                    thread.join()
+                for drive_file in delete:
+                    drive_file: DriveFile
+                    
+                    api_helper.delete_file(drive_file)
 
-                api_helper.print_cyan(f'\nOperation took {time.time() - start : .2f} seconds')
-                
-                if api_helper.test_items(drive_directory=DRIVE_DIRECTORY, 
-                                                local_directory=LOCAL_DIRECTORY) and EXECUTION_RESULT:
-                    api_helper.print_success('\nPush was done successfully!!!\n')
-                else:
-                    api_helper.print_fail('Push was not completed :(')
+            if api_helper.test_items(drive_directory=DRIVE_DIRECTORY, 
+                                            local_directory=LOCAL_DIRECTORY) and EXECUTION_RESULT:
+                api_helper.print_success('\nPush was done successfully!!!\n')
             else:
-                api_helper.print_fail('\nPush declined.\n')
+                api_helper.print_fail('Push was not completed :(')
+            
+            api_helper.print_cyan(f'Operation took {time.time() - start : .2f} seconds\n')
+        else:
+            api_helper.print_fail('\nPush was declined.\n')
 
     except Exception as ex:
         api_helper.print_fail(ex)
         api_helper.print_fail('Push was not completed :(')
+        # traceback.print_exc()
