@@ -21,12 +21,18 @@ creds = store.get()
 if not creds or creds.invalid:
     flow = client.flow_from_clientsecrets('client_id.json', SCOPES)
     creds = tools.run_flow(flow, store)
+
 DRIVE = discovery.build('drive', 'v3', http=creds.authorize(Http()))
 
 
 if __name__ == '__main__':
     try:
         api_helper.print_warning('\nPULL')
+        
+        about = DRIVE.about().get(fields='user').execute()
+        
+        api_helper.print_warning(f'\nCurrent account: {about["user"]["emailAddress"]}')
+        api_helper.print_warning(f'Account name: {about["user"]["displayName"]}')
         
         DRIVE_DIRECTORY = PATH.drive_folder_name
         LOCAL_DIRECTORY = PATH.local_folder_path
@@ -133,4 +139,4 @@ if __name__ == '__main__':
     except Exception as ex:
         api_helper.print_fail(ex)
         api_helper.print_fail('Pull was not completed :(')
-        # traceback.print_exc()
+        traceback.print_exc()

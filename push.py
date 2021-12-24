@@ -28,6 +28,11 @@ if __name__ == '__main__':
     try:
         api_helper.print_warning('\nPUSH')
         
+        about = DRIVE.about().get(fields='user').execute()
+        
+        api_helper.print_warning(f'\nCurrent account: {about["user"]["emailAddress"]}')
+        api_helper.print_warning(f'Account name: {about["user"]["displayName"]}')
+        
         DRIVE_DIRECTORY = PATH.drive_folder_name
         LOCAL_DIRECTORY = PATH.local_folder_path
         
@@ -132,4 +137,4 @@ if __name__ == '__main__':
     except Exception as ex:
         api_helper.print_fail(ex)
         api_helper.print_fail('Push was not completed :(')
-        # traceback.print_exc()
+        traceback.print_exc()
