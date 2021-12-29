@@ -1,9 +1,10 @@
 from os import listdir, remove
 from os.path import isfile, join
+
+import helpers.message_helper
 from helpers import api_helper
 import os
-from pathlib import Path
-from helpers.files import LocalFile
+from helpers.models import LocalFile
 import config
 
 
@@ -21,7 +22,7 @@ def delete_file(local_file: LocalFile):
     config.CURRENT_LOAD_NUMBER += 1
     loaded = config.CURRENT_LOAD_NUMBER
     total = config.TOTAL_LOAD_NUMBER
-    api_helper.print_success(f'Deleted file {local_file.name} [{loaded / float(total) * 100 : .2f}% ({loaded}/{total}) ]')
+    helpers.message_helper.print_success(f'Deleted file {local_file.name} [{loaded / float(total) * 100 : .2f}% ({loaded}/{total}) ]')
     
 
 def get_local_nested_folders(path) -> set:

@@ -9,4 +9,4 @@
 
 - Credentials should be in `client_id.json` file in the root folder.
 
-- Get credentials here https://console.cloud.google.com/apis/credentials :)
+- Get required credentials here https://console.cloud.google.com/apis/credentials
