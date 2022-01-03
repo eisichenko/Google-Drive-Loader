@@ -1,6 +1,7 @@
 client_id.json
 storage.json
 files*/
+test/
 .vscode
 win_env/
 

@@ -1,19 +1,15 @@
 import os
-
-
-class Path:
-    def __init__(self, local_folder_path, drive_folder_name):
-        self.local_folder_path = local_folder_path
-        self.drive_folder_name = drive_folder_name
+import pathlib
 
 
 PAGESIZE = 1000
 
-CURRENT_LOAD_NUMBER = 0
-TOTAL_LOAD_NUMBER = 0
-
-
 if os.name == 'nt':
-    PATH = Path('D:\\audios', 'audios')
+    LOCAL_ROOT_PATH = 'D:\\audios'
 else:
-    PATH = Path('/media/data/audios', 'audios')
+    # LOCAL_ROOT_PATH = '/media/data/audios'
+    LOCAL_ROOT_PATH = "/media/data/programming/SomePrograms/Python/Google-Drive-Loader/files'"
+    # LOCAL_ROOT_PATH = "/media/data/programming/SomePrograms/Python/Google-Drive-Loader/test"
+
+# drive folder name and local folder name will be the same
+DRIVE_ROOT_NAME = pathlib.Path(LOCAL_ROOT_PATH).name
