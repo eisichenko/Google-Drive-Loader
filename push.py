@@ -2,6 +2,7 @@ import time
 import traceback
 
 import config
+import helpers.set_helper
 from helpers import api_helper, local_helper, message_helper, set_helper
 from helpers.models import DriveFile, LocalFile, UserAccount
 
@@ -45,7 +46,7 @@ if __name__ == '__main__':
                     drive_folder: DriveFile
                     print(f'\nDeleting drive folder {drive_folder}...')
                     api_helper.delete_file(drive_folder)
-                    message_helper.print_warning(f'Deleted drive folder {drive_folder}')
+                    message_helper.print_success(f'DELETED drive folder {drive_folder}')
 
                 if len(folders_to_create) > 0:
                     api_helper.create_drive_folders_from_local(drive_root, folders_to_create)
@@ -94,31 +95,35 @@ if __name__ == '__main__':
                 raise Exception('\nFolders are not equal, no push items though\n')
 
         for drive_folder in push_dict:
-            message_helper.print_cyan('=' * 40)
+            message_helper.print_cyan('\n' + '=' * 40)
             message_helper.print_success(f'FOLDER: {drive_folder}\n')
-            message_helper.print_cyan('Will be uploaded:\n')
-            
-            for local_file in push_dict[drive_folder][api_helper.UPLOAD_TO_DRIVE_KEY]:
-                message_helper.print_cyan(local_file.name)
-            
-            message_helper.print_cyan('=' * 40)
-            
-            message_helper.print_warning('\n' + '=' * 40)
-            message_helper.print_success(f'FOLDER: {drive_folder}\n')
-            message_helper.print_warning('Will be deleted:\n')
-            
-            for drive_file in push_dict[drive_folder][api_helper.DELETE_ON_DRIVE_KEY]:
-                message_helper.print_warning(drive_file.name)
-                
-            message_helper.print_warning('=' * 40 + '\n')
+            message_helper.print_cyan('Will be uploaded to drive:\n')
 
-        choice = input('Are you sure to complete the operation? (y/n) ')
+            if len(push_dict[drive_folder][api_helper.UPLOAD_TO_DRIVE_KEY]) > 0:
+                for local_file in push_dict[drive_folder][api_helper.UPLOAD_TO_DRIVE_KEY]:
+                    message_helper.print_cyan(f'{local_file.name} ({message_helper.size_to_string(local_file.size)})')
+            else:
+                message_helper.print_fail("Nothing to upload")
+
+            message_helper.print_warning('\nWill be deleted on drive:\n')
+
+            if len(push_dict[drive_folder][api_helper.DELETE_ON_DRIVE_KEY]) > 0:
+                for drive_file in push_dict[drive_folder][api_helper.DELETE_ON_DRIVE_KEY]:
+                    message_helper.print_warning(f'{drive_file.name} ({message_helper.size_to_string(drive_file.size)})')
+            else:
+                message_helper.print_fail("Nothing to delete")
+                
+            message_helper.print_cyan('=' * 40 + '\n')
+
+        total_size_to_process = set_helper.get_total_size_to_process(push_dict)
+        message_helper.print_warning(f'\nTotal size to process: {message_helper.size_to_string(total_size_to_process)}')
+        choice = input('\nAre you sure to complete the operation? (y/n) ')
         
         if choice == 'y':
             start = time.time()
             
             processed_number_of_files = 0
-            total_number_of_files = api_helper.get_amount_of_files(push_dict)
+            total_number_of_files = helpers.set_helper.get_amount_of_files(push_dict)
             
             for drive_folder in push_dict:
                 upload = push_dict[drive_folder][api_helper.UPLOAD_TO_DRIVE_KEY]
@@ -129,19 +134,21 @@ if __name__ == '__main__':
                     print(f'\nDeleting drive file {drive_file.absolute_drive_path}...')
                     api_helper.delete_file(drive_file)
                     processed_number_of_files += 1
-                    message_helper.print_success(f'DELETED drive file {drive_file.absolute_drive_path} [{processed_number_of_files / float(total_number_of_files) * 100 : .2f}% ({processed_number_of_files}/{total_number_of_files}) ]')
+                    total_size_to_process -= drive_file.size
+                    message_helper.print_success(f'DELETED drive file {drive_file.absolute_drive_path} [{processed_number_of_files / float(total_number_of_files) * 100 : .2f}% ({processed_number_of_files}/{total_number_of_files}) {message_helper.size_to_string(total_size_to_process)} left ]')
                 
                 for local_file in upload:    
                     local_file: LocalFile
-                    print(f'\nUploading local file {local_file} --> {local_file.name}...')
+                    print(f'\nUploading local file {local_file.absolute_drive_path}...')
 
                     new_file: DriveFile = api_helper.upload_file(
                         local_file=local_file,
                         drive_folder=drive_folder
                     )
                     processed_number_of_files += 1
+                    total_size_to_process -= local_file.size
                     message_helper.print_success(
-                        f'File {new_file.absolute_drive_path} UPLOADED (id {new_file.id}) [{processed_number_of_files / float(total_number_of_files) * 100 : .2f}% ({processed_number_of_files}/{total_number_of_files}) ]')
+                        f'UPLOADED local file {new_file.absolute_drive_path} [{processed_number_of_files / float(total_number_of_files) * 100 : .2f}% ({processed_number_of_files}/{total_number_of_files}) {message_helper.size_to_string(total_size_to_process)} left ]')
 
             if api_helper.test_items(drive_root=drive_root,
                                      local_root=local_root):
@@ -149,11 +156,11 @@ if __name__ == '__main__':
             else:
                 message_helper.print_fail('Push was not completed :(')
             
-            message_helper.print_cyan(f'Operation took {time.time() - start : .2f} seconds\n')
+            message_helper.print_cyan(f'Operation took {message_helper.time_to_string(time.time() - start)}\n')
         else:
             message_helper.print_fail('\nPush was declined\n')
 
     except Exception as ex:
         message_helper.print_fail('\nPush was not completed :(\n')
-        message_helper.print_fail(ex)
+        message_helper.print_fail(str(ex))
         traceback.print_exc()

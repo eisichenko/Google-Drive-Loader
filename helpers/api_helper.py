@@ -75,16 +75,22 @@ def upload_file(local_file: LocalFile, drive_folder: DriveFile) -> DriveFile:
 def get_folder_files(drive_folder: DriveFile) -> set[DriveFile]:
     print(f'\nGetting files from drive folder {drive_folder.absolute_drive_path}...')
 
+    query = f"'{drive_folder.id}' in parents and mimeType != '{DRIVE_FOLDER_TYPE}' and trashed=false"
+    fields = 'nextPageToken, files(id, name, size)'
+
     response = DRIVE.files().list(
-        q=f"'{drive_folder.id}' in parents and mimeType != '{DRIVE_FOLDER_TYPE}' and trashed=false",
+        q=query,
+        fields=fields,
         pageSize=PAGESIZE).execute()
 
     files = response['files']
+
     next_page_token = response.get('nextPageToken')
 
     while next_page_token:
         response = DRIVE.files().list(
-            q=f"'{drive_folder.id}' in parents and mimeType != '{DRIVE_FOLDER_TYPE}' and trashed=false",
+            q=query,
+            fields=fields,
             pageSize=PAGESIZE, pageToken=next_page_token).execute()
         next_page_token = response.get('nextPageToken')
         files.extend(response.get('files', []))
@@ -94,7 +100,8 @@ def get_folder_files(drive_folder: DriveFile) -> set[DriveFile]:
     for file_response in files:
         drive_file: DriveFile = DriveFile(file_id=file_response['id'],
                                           name=file_response['name'],
-                                          parent=drive_folder)
+                                          parent=drive_folder,
+                                          size=int(file_response['size']))
 
         if drive_file in drive_files:
             raise Exception(f'Duplicate files {drive_file.name} in drive folder {drive_folder}')
@@ -105,8 +112,12 @@ def get_folder_files(drive_folder: DriveFile) -> set[DriveFile]:
 
 
 def get_top_level_folders(root_folder: DriveFile) -> set[DriveFile]:
+    query = f"'{root_folder.id}' in parents and mimeType = '{DRIVE_FOLDER_TYPE}' and trashed=false"
+    fields = 'nextPageToken, files(id, name)'
+
     response = DRIVE.files().list(
-        q=f"'{root_folder.id}' in parents and mimeType = '{DRIVE_FOLDER_TYPE}' and trashed=false",
+        q=query,
+        fields=fields,
         pageSize=PAGESIZE).execute()
 
     files = response['files']
@@ -114,7 +125,8 @@ def get_top_level_folders(root_folder: DriveFile) -> set[DriveFile]:
 
     while next_page_token:
         response = DRIVE.files().list(
-            q=f"'{root_folder.id}' in parents and mimeType = '{DRIVE_FOLDER_TYPE}' and trashed=false",
+            q=query,
+            fields=fields,
             pageSize=PAGESIZE, pageToken=next_page_token).execute()
         next_page_token = response.get('nextPageToken')
         files.extend(response.get('files', []))
@@ -137,9 +149,12 @@ def get_top_level_folders(root_folder: DriveFile) -> set[DriveFile]:
 def get_drive_folders(root_folder: DriveFile, parent: DriveFile = None) -> set[DriveFile]:
     print(f'\nGetting nested folders from drive folder {root_folder}...')
 
+    query = f"'{root_folder.id}' in parents and mimeType = '{DRIVE_FOLDER_TYPE}' and trashed=false"
+    fields = 'nextPageToken, files(id, name)'
+
     folders_response = DRIVE.files().list(
-        q=f"'{root_folder.id}' in parents and mimeType = '{DRIVE_FOLDER_TYPE}' and trashed=false",
-        fields='nextPageToken, files(id, name)',
+        q=query,
+        fields=fields,
         pageSize=PAGESIZE).execute()
 
     all_folders_response = folders_response['files']
@@ -147,8 +162,8 @@ def get_drive_folders(root_folder: DriveFile, parent: DriveFile = None) -> set[D
 
     while next_page_token:
         folders_response = DRIVE.files().list(
-            q=f"'{root_folder.id}' in parents and mimeType = '{DRIVE_FOLDER_TYPE}' and trashed=false",
-            fields='nextPageToken, files(id, name)',
+            q=query,
+            fields=fields,
             pageSize=PAGESIZE, pageToken=next_page_token).execute()
         next_page_token = folders_response.get('nextPageToken')
         all_folders_response.extend(folders_response.get('files', []))
@@ -203,8 +218,9 @@ def create_drive_folders_from_local(drive_root: DriveFile, folders_to_create: se
     for local_folder in folders_to_create:
         local_folder: LocalFile
         if local_folder.parent.absolute_drive_path == drive_root.absolute_drive_path:
+            print(f'\nCreating drive folder {local_folder.absolute_drive_path}...')
             new_folder: DriveFile = create_folder(drive_root, local_folder.name)
-            message_helper.print_warning(f'\nCreated drive folder {new_folder}')
+            message_helper.print_success(f'CREATED drive folder {new_folder}')
 
     for drive_folder in get_top_level_folders(drive_root):
         drive_folder: DriveFile
@@ -286,21 +302,3 @@ def fix_quotes(s: str) -> str:
     if "\\'" not in s and "'" in s:
         return s.replace("'", "\\'")
     return s
-
-
-def get_amount_of_files(folders: dict) -> int:
-    res = 0
-    for folder in folders:
-        if UPLOAD_TO_DRIVE_KEY in folders[folder]:
-            res += len(folders[folder][UPLOAD_TO_DRIVE_KEY])
-
-        if DELETE_ON_DRIVE_KEY in folders[folder]:
-            res += len(folders[folder][DELETE_ON_DRIVE_KEY])
-
-        if DOWNLOAD_FROM_DRIVE_KEY in folders[folder]:
-            res += len(folders[folder][DOWNLOAD_FROM_DRIVE_KEY])
-
-        if DELETE_IN_LOCAL_KEY in folders[folder]:
-            res += len(folders[folder][DELETE_IN_LOCAL_KEY])
-
-    return res

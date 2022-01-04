@@ -6,14 +6,14 @@ from helpers.validation_helper import is_valid_name, INVALID_CHARACTERS
 
 
 class AbstractFile:
-    def __init__(self, name: str, parent: 'AbstractFile'):
-
+    def __init__(self, name: str, parent: 'AbstractFile', size: int = 0):
         if parent is None:
             self.absolute_drive_path = name
         else:
             self.absolute_drive_path = os.path.join(parent.absolute_drive_path, name)
         self.parent = parent
         self.name = name
+        self.size = int(size)
 
         if not is_valid_name(name):
             raise Exception(f'Invalid name {name} [ {self.absolute_drive_path} ]. Invalid characters {INVALID_CHARACTERS}')
@@ -40,14 +40,14 @@ class AbstractFile:
 
 
 class DriveFile(AbstractFile):
-    def __init__(self, file_id: str, name: str, parent: Union['DriveFile', None]):
-        super().__init__(name, parent)
+    def __init__(self, file_id: str, name: str, parent: Union['DriveFile', None], size: int = 0):
+        super().__init__(name, parent, size)
         self.id = file_id
 
 
 class LocalFile(AbstractFile):
-    def __init__(self, absolute_local_path: str, parent: Union['LocalFile', None]):
-        super().__init__(Path(absolute_local_path).name, parent)
+    def __init__(self, absolute_local_path: str, parent: Union['LocalFile', None], size: int = 0):
+        super().__init__(Path(absolute_local_path).name, parent, size)
         self.absolute_local_path = absolute_local_path
 
 

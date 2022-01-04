@@ -2,6 +2,7 @@ import time
 import traceback
 
 import config
+import helpers.set_helper
 from helpers import api_helper, local_helper, message_helper, set_helper
 from helpers.models import DriveFile, LocalFile, UserAccount
 
@@ -44,8 +45,9 @@ if __name__ == '__main__':
             if choice == 'y':
                 for local_folder in folders_to_delete:
                     local_folder: LocalFile
+                    print(f'\nDeleting local folder {local_folder}...')
                     local_helper.delete_folder(local_folder)
-                    message_helper.print_warning(f'\nDeleted local folder {local_folder}')
+                    message_helper.print_success(f'DELETED local folder {local_folder}')
 
                 if len(folders_to_create) > 0:
                     local_helper.create_local_folders_from_drive(local_root, folders_to_create)
@@ -93,32 +95,36 @@ if __name__ == '__main__':
                 raise Exception('\nFolders are not equal, no push items though\n')
 
         for drive_folder in pull_dict:
-            message_helper.print_cyan('=' * 40)
+            message_helper.print_cyan('\n' + '=' * 40)
             message_helper.print_success(f'FOLDER: {drive_folder}\n')
-            message_helper.print_cyan('Will be downloaded:\n')
+            message_helper.print_cyan('Will be downloaded from drive:\n')
 
-            for drive_file in pull_dict[drive_folder][api_helper.DOWNLOAD_FROM_DRIVE_KEY]:
-                drive_file: DriveFile
-                message_helper.print_cyan(drive_file.name)
+            if len(pull_dict[drive_folder][api_helper.DOWNLOAD_FROM_DRIVE_KEY]) > 0:
+                for drive_file in pull_dict[drive_folder][api_helper.DOWNLOAD_FROM_DRIVE_KEY]:
+                    drive_file: DriveFile
+                    message_helper.print_cyan(f'{drive_file.name} ({message_helper.size_to_string(drive_file.size)})')
+            else:
+                message_helper.print_fail("Nothing to download")
 
-            message_helper.print_cyan('=' * 40)
+            message_helper.print_warning('\nWill be deleted locally:\n')
 
-            message_helper.print_warning('\n' + '=' * 40)
-            message_helper.print_success(f'FOLDER: {drive_folder}\n')
-            message_helper.print_warning('Will be deleted:\n')
+            if len(pull_dict[drive_folder][api_helper.DELETE_IN_LOCAL_KEY]) > 0:
+                for local_file in pull_dict[drive_folder][api_helper.DELETE_IN_LOCAL_KEY]:
+                    message_helper.print_warning(f'{local_file.name} ({message_helper.size_to_string(local_file.size)})')
+            else:
+                message_helper.print_fail("Nothing to delete")
 
-            for local_file in pull_dict[drive_folder][api_helper.DELETE_IN_LOCAL_KEY]:
-                message_helper.print_warning(local_file.name)
+            message_helper.print_cyan('=' * 40 + '\n')
 
-            message_helper.print_warning('=' * 40 + '\n')
-
-        choice = input('Are you sure to complete the operation? (y/n) ')
+        total_size_to_process = set_helper.get_total_size_to_process(pull_dict)
+        message_helper.print_warning(f'\nTotal size to process: {message_helper.size_to_string(total_size_to_process)}')
+        choice = input('\nAre you sure to complete the operation? (y/n) ')
 
         if choice == 'y':
             start = time.time()
 
             processed_number_of_files = 0
-            total_number_of_files = api_helper.get_amount_of_files(pull_dict)
+            total_number_of_files = helpers.set_helper.get_amount_of_files(pull_dict)
 
             for drive_folder in pull_dict:
                 local_folder = set_helper.get_from_set_by_string(local_folders, drive_folder.absolute_drive_path)
@@ -128,20 +134,23 @@ if __name__ == '__main__':
 
                 for local_file in delete:
                     local_file: LocalFile
+                    print(f'\nDeleting local file {local_file.absolute_drive_path}...')
                     local_helper.delete_file(local_file)
                     processed_number_of_files += 1
-                    message_helper.print_success(f'\nDELETED local file {local_file.absolute_drive_path} [{processed_number_of_files / float(total_number_of_files) * 100 : .2f}% ({processed_number_of_files}/{total_number_of_files}) ]')
+                    total_size_to_process -= local_file.size
+                    message_helper.print_success(f'DELETED local file {local_file.absolute_drive_path} [{processed_number_of_files / float(total_number_of_files) * 100 : .2f}% ({processed_number_of_files}/{total_number_of_files}) {message_helper.size_to_string(total_size_to_process)} left ]')
 
                 for drive_file in download:
                     drive_file: DriveFile
 
-                    print(f'\nDownloading drive file {drive_file.name}...')
+                    print(f'\nDownloading drive file {drive_file.absolute_drive_path}...')
                     api_helper.download_file(
                         drive_file=drive_file,
                         local_folder=local_folder
                     )
                     processed_number_of_files += 1
-                    message_helper.print_success(f'DOWNLOADED drive file {drive_file.absolute_drive_path} [{processed_number_of_files / float(total_number_of_files) * 100 : .2f}% ({processed_number_of_files}/{total_number_of_files}) ]')
+                    total_size_to_process -= drive_file.size
+                    message_helper.print_success(f'DOWNLOADED drive file {drive_file.absolute_drive_path} [{processed_number_of_files / float(total_number_of_files) * 100 : .2f}% ({processed_number_of_files}/{total_number_of_files}) {message_helper.size_to_string(total_size_to_process)} left ]')
 
             if api_helper.test_items(drive_root=drive_root,
                                      local_root=local_root):
@@ -149,11 +158,11 @@ if __name__ == '__main__':
             else:
                 message_helper.print_fail('Pull was not completed :(')
 
-            message_helper.print_cyan(f'Operation took {time.time() - start : .2f} seconds\n')
+            message_helper.print_cyan(f'Operation took {message_helper.time_to_string(time.time() - start)}\n')
         else:
             message_helper.print_fail('\nPull was declined\n')
 
     except Exception as ex:
         message_helper.print_fail('\nPull was not completed :(\n')
-        message_helper.print_fail(ex)
+        message_helper.print_fail(str(ex))
         traceback.print_exc()

@@ -1,7 +1,7 @@
 import os
 import shutil
 from os import listdir, remove
-from os.path import isfile, join, isdir, exists
+from os.path import isfile, join, isdir, exists, getsize
 
 from helpers import message_helper
 from helpers.models import LocalFile, DriveFile
@@ -28,8 +28,9 @@ def create_local_folders_from_drive(root_folder: LocalFile, folders_to_create: s
         local_path = join(root_folder.absolute_local_path, drive_folder.name)
         if (drive_folder.parent.absolute_drive_path == root_folder.absolute_drive_path
                 and not exists(local_path)):
+            print(f'\nCreating local folder {local_path}...')
             create_folder(root_folder, drive_folder.name)
-            message_helper.print_warning(f'\nCreated local folder {local_path}')
+            message_helper.print_success(f'CREATED local folder {local_path}')
 
     for file_name in os.listdir(root_folder.absolute_local_path):
         file_path = join(root_folder.absolute_local_path, file_name)
@@ -45,7 +46,8 @@ def get_folder_files(root_folder: LocalFile) -> set[LocalFile]:
     for file_name in listdir(root_folder.absolute_local_path):
         file_path = join(root_folder.absolute_local_path, file_name)
         if isfile(file_path):
-            file = LocalFile(file_path, root_folder)
+            size = getsize(file_path)
+            file = LocalFile(file_path, root_folder, size=size)
             res.add(file)
 
     return res
