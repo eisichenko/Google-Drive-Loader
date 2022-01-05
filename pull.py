@@ -18,7 +18,7 @@ if __name__ == '__main__':
         drive_root: DriveFile = api_helper.get_file_by_name(config.DRIVE_ROOT_NAME, is_folder=True)
         local_root: LocalFile = LocalFile(config.LOCAL_ROOT_PATH, parent=None)
 
-        drive_folders = api_helper.get_drive_folders(drive_root)
+        drive_folders = api_helper.get_drive_folders_and_files(drive_root)
 
         print('All drive folders:')
         print(drive_folders)
@@ -52,7 +52,10 @@ if __name__ == '__main__':
                 if len(folders_to_create) > 0:
                     local_helper.create_local_folders_from_drive(local_root, folders_to_create)
 
-                drive_folders = api_helper.get_drive_folders(drive_root)
+                drive_root: DriveFile = api_helper.get_file_by_name(config.DRIVE_ROOT_NAME, is_folder=True)
+                local_root: LocalFile = LocalFile(config.LOCAL_ROOT_PATH, parent=None)
+
+                drive_folders = api_helper.get_drive_folders_and_files(drive_root)
 
                 local_folders = local_helper.get_local_folders(local_root)
 
@@ -73,7 +76,7 @@ if __name__ == '__main__':
             absolute_drive_path = drive_folder.absolute_drive_path
             local_folder: LocalFile = set_helper.get_from_set_by_string(local_folders, absolute_drive_path)
 
-            drive_file_set = api_helper.get_folder_files(drive_folder)
+            drive_file_set = drive_folder.child_files
 
             local_file_set = local_helper.get_folder_files(local_folder)
 
@@ -88,7 +91,7 @@ if __name__ == '__main__':
                 pull_dict[drive_folder][api_helper.DELETE_IN_LOCAL_KEY] = delete
 
         if len(pull_dict) == 0:
-            if api_helper.test_items(drive_root=drive_root, local_root=local_root):
+            if api_helper.test_items(drive_root_name=config.DRIVE_ROOT_NAME, local_root_path=config.LOCAL_ROOT_PATH):
                 message_helper.print_success(f'\nEverything is up to date\n{drive_root} -> {local_root.absolute_local_path}\n')
                 exit()
             else:
@@ -152,8 +155,8 @@ if __name__ == '__main__':
                     total_size_to_process -= drive_file.size
                     message_helper.print_success(f'DOWNLOADED drive file {drive_file.absolute_drive_path} [{processed_number_of_files / float(total_number_of_files) * 100 : .2f}% ({processed_number_of_files}/{total_number_of_files}) {message_helper.size_to_string(total_size_to_process)} left ]')
 
-            if api_helper.test_items(drive_root=drive_root,
-                                     local_root=local_root):
+            if api_helper.test_items(drive_root_name=config.DRIVE_ROOT_NAME,
+                                     local_root_path=config.LOCAL_ROOT_PATH):
                 message_helper.print_success('\nPull was done successfully!!!\n')
             else:
                 message_helper.print_fail('Pull was not completed :(')

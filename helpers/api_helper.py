@@ -47,7 +47,9 @@ def create_folder(root_folder: DriveFile, name: str) -> DriveFile:
     }
 
     folder_response = DRIVE.files().create(body=file_metadata, fields='id, name').execute()
-    return DriveFile(folder_response['id'], folder_response['name'], root_folder)
+    new_folder = DriveFile(folder_response['id'], folder_response['name'], root_folder)
+    root_folder.child_folders.add(new_folder)
+    return new_folder
 
 
 def upload_file(local_file: LocalFile, drive_folder: DriveFile) -> DriveFile:
@@ -72,110 +74,46 @@ def upload_file(local_file: LocalFile, drive_folder: DriveFile) -> DriveFile:
     return DriveFile(drive_file_response['id'], drive_file_response['name'], drive_folder)
 
 
-def get_folder_files(drive_folder: DriveFile) -> set[DriveFile]:
-    print(f'\nGetting files from drive folder {drive_folder.absolute_drive_path}...')
+def get_drive_folders_and_files(root_folder: DriveFile, parent: DriveFile = None) -> set[DriveFile]:
+    print(f'\nGetting nested folders and files from drive folder {root_folder}...')
 
-    query = f"'{drive_folder.id}' in parents and mimeType != '{DRIVE_FOLDER_TYPE}' and trashed=false"
-    fields = 'nextPageToken, files(id, name, size)'
+    query = f"'{root_folder.id}' in parents and trashed=false"
+    fields = 'nextPageToken, files(id, name, size, mimeType)'
 
-    response = DRIVE.files().list(
+    folders_and_files_response = DRIVE.files().list(
         q=query,
         fields=fields,
         pageSize=PAGESIZE).execute()
 
-    files = response['files']
-
-    next_page_token = response.get('nextPageToken')
+    all_folders_and_files_response = folders_and_files_response['files']
+    next_page_token = folders_and_files_response.get('nextPageToken')
 
     while next_page_token:
-        response = DRIVE.files().list(
+        folders_and_files_response = DRIVE.files().list(
             q=query,
             fields=fields,
             pageSize=PAGESIZE, pageToken=next_page_token).execute()
-        next_page_token = response.get('nextPageToken')
-        files.extend(response.get('files', []))
-
-    drive_files = set()
-
-    for file_response in files:
-        drive_file: DriveFile = DriveFile(file_id=file_response['id'],
-                                          name=file_response['name'],
-                                          parent=drive_folder,
-                                          size=int(file_response['size']))
-
-        if drive_file in drive_files:
-            raise Exception(f'Duplicate files {drive_file.name} in drive folder {drive_folder}')
-
-        drive_files.add(drive_file)
-
-    return drive_files
-
-
-def get_top_level_folders(root_folder: DriveFile) -> set[DriveFile]:
-    query = f"'{root_folder.id}' in parents and mimeType = '{DRIVE_FOLDER_TYPE}' and trashed=false"
-    fields = 'nextPageToken, files(id, name)'
-
-    response = DRIVE.files().list(
-        q=query,
-        fields=fields,
-        pageSize=PAGESIZE).execute()
-
-    files = response['files']
-    next_page_token = response.get('nextPageToken')
-
-    while next_page_token:
-        response = DRIVE.files().list(
-            q=query,
-            fields=fields,
-            pageSize=PAGESIZE, pageToken=next_page_token).execute()
-        next_page_token = response.get('nextPageToken')
-        files.extend(response.get('files', []))
-
-    drive_folders = set()
-
-    for file_response in files:
-        drive_folder: DriveFile = DriveFile(file_id=file_response['id'],
-                                            name=file_response['name'],
-                                            parent=root_folder)
-
-        if drive_folder in drive_folders:
-            raise Exception(f'Duplicate folders {drive_folder} in drive folder {root_folder}')
-
-        drive_folders.add(drive_folder)
-
-    return drive_folders
-
-
-def get_drive_folders(root_folder: DriveFile, parent: DriveFile = None) -> set[DriveFile]:
-    print(f'\nGetting nested folders from drive folder {root_folder}...')
-
-    query = f"'{root_folder.id}' in parents and mimeType = '{DRIVE_FOLDER_TYPE}' and trashed=false"
-    fields = 'nextPageToken, files(id, name)'
-
-    folders_response = DRIVE.files().list(
-        q=query,
-        fields=fields,
-        pageSize=PAGESIZE).execute()
-
-    all_folders_response = folders_response['files']
-    next_page_token = folders_response.get('nextPageToken')
-
-    while next_page_token:
-        folders_response = DRIVE.files().list(
-            q=query,
-            fields=fields,
-            pageSize=PAGESIZE, pageToken=next_page_token).execute()
-        next_page_token = folders_response.get('nextPageToken')
-        all_folders_response.extend(folders_response.get('files', []))
+        next_page_token = folders_and_files_response.get('nextPageToken')
+        all_folders_and_files_response.extend(folders_and_files_response.get('files', []))
 
     nested_folders = set()
 
-    for folder_response in all_folders_response:
-        folder: DriveFile = DriveFile(folder_response['id'], folder_response['name'], parent=root_folder)
-        if folder in nested_folders:
-            raise Exception(f'Duplicate drive folders {folder}')
-        nested_folders.add(folder)
-        nested_folders.update(get_drive_folders(folder, root_folder))
+    for response in all_folders_and_files_response:
+        if response['mimeType'] == DRIVE_FOLDER_TYPE:
+            new_file: DriveFile = DriveFile(response['id'], response['name'], parent=root_folder)
+            if new_file in nested_folders:
+                raise Exception(f'Duplicate drive folders {new_file}')
+            nested_folders.add(new_file)
+            root_folder.child_folders.add(new_file)
+            nested_folders.update(get_drive_folders_and_files(new_file, root_folder))
+        else:
+            new_file: DriveFile = DriveFile(response['id'],
+                                            response['name'],
+                                            parent=root_folder,
+                                            size=response['size'])
+            if new_file in root_folder.child_files:
+                raise Exception(f'Duplicate drive files {new_file}')
+            root_folder.child_files.add(new_file)
 
     if parent is None:
         if root_folder in nested_folders:
@@ -210,6 +148,10 @@ def download_file(drive_file: DriveFile, local_folder: LocalFile) -> None:
 def delete_file(drive_file: DriveFile) -> None:
     try:
         DRIVE.files().delete(fileId=drive_file.id).execute()
+        if drive_file in drive_file.parent.child_folders:
+            drive_file.parent.child_folders.remove(drive_file)
+        if drive_file in drive_file.parent.child_files:
+            drive_file.parent.child_files.remove(drive_file)
     except HttpError:
         pass
 
@@ -222,7 +164,7 @@ def create_drive_folders_from_local(drive_root: DriveFile, folders_to_create: se
             new_folder: DriveFile = create_folder(drive_root, local_folder.name)
             message_helper.print_success(f'CREATED drive folder {new_folder}')
 
-    for drive_folder in get_top_level_folders(drive_root):
+    for drive_folder in drive_root.child_folders:
         drive_folder: DriveFile
         create_drive_folders_from_local(drive_folder, folders_to_create)
 
@@ -263,10 +205,13 @@ def fetch_from_drive_to_local(drive_set: set[DriveFile], local_set: set[LocalFil
     return download, delete
 
 
-def test_items(drive_root: DriveFile, local_root: LocalFile) -> bool:
+def test_items(drive_root_name: str, local_root_path: str) -> bool:
     print_warning('\nCOMPARING LOCAL AND DRIVE FOLDERS...\n')
 
-    drive_folders = get_drive_folders(drive_root)
+    drive_root: DriveFile = get_file_by_name(drive_root_name, is_folder=True)
+    local_root: LocalFile = LocalFile(local_root_path, parent=None)
+
+    drive_folders = get_drive_folders_and_files(drive_root)
     local_folders = local_helper.get_local_folders(local_root)
 
     if local_folders != drive_folders:
@@ -279,7 +224,7 @@ def test_items(drive_root: DriveFile, local_root: LocalFile) -> bool:
         absolute_drive_path = drive_folder.absolute_drive_path
         local_folder = set_helper.get_from_set_by_string(local_folders, absolute_drive_path)
 
-        drive_file_set = get_folder_files(drive_folder)
+        drive_file_set = drive_folder.child_files
         local_file_set = local_helper.get_folder_files(local_folder)
 
         upload, delete = fetch_from_local_to_drive(
