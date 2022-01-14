@@ -1,7 +1,7 @@
 import os
 import pathlib
 
-
+PROJECT_ROOT_ABS_PATH = os.path.dirname(os.path.abspath(__file__))
 PAGESIZE = 1000
 
 if os.name == 'nt':
